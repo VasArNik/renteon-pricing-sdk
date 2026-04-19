@@ -79,7 +79,7 @@ prices = client.get_prices(
 )
 
 discounted = prices.apply_percentage(-10)
-client.save_prices(YOUR_PRICELIST_ID=2426, price_list=discounted)
+client.save_prices(pricelist_id=YOUR_PRICELIST_ID, price_list=discounted)
 ```
 
 ---
@@ -163,7 +163,7 @@ client.raw_pricelists_catalog
 
 
 # Force a re-fetch
-client.refresh_catalog()
+client.refresh_pricelist_catalog()
 ```
 
 > Per the Renteon API documentation, pricelist IDs differ between test and production environments. It is recommended to persist the catalog externally and load it on startup rather than resolving pricelist names at runtime each time. In any case it should be
