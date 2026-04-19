@@ -1,0 +1,44 @@
+# Environment
+.env
+
+# python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# ve
+.venv/
+venv/
+env/
+
+# IDEs
+.vscode/
+.idea/
+*.code-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+
+# misc folder
+ignore/
+
+#random test files 
+*.xlsx
+
+#any json files
+*.json
+
+#cli for runing tests
+cli.py
+cli_pricing_tools.py
+
+
+# demos
+examples/
