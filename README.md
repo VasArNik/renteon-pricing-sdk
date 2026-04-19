@@ -470,7 +470,7 @@ renteon_pricing_sdk/
 - Pricelist IDs **differ between test and production environments**. Do not hardcode IDs. Persist the catalog and make ID mappings configurable per environment.
 - SIPP codes (car categories) follow the [ACRISS standard](https://www.acriss.org/) and are always 4 characters.
 - `DurationTo: null` in the API means open-ended (e.g. "22 days or more").
-- The `SavePrices` endpoint accepts a single date range per call. The SDK serialises `PriceList` rows as-is.
+
 
 ---
 
