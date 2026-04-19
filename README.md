@@ -221,7 +221,7 @@ Constructing PriceLists from external Car-rental pricing data pipelines based on
 Integrating Renteon with custom ETL pipelines.
 
 
-Transforming Rate tables from other sources (e.g. other car rental management systems) to a PriceList instance compatible with Renteon. A mediator between different CRM's pricelist format and Renteon, Which eliminates manual work that I personally know so many car-rental companies do.
+Transforming Rate tables from other sources (e.g. other car rental management systems) to a PriceList instance compatible with Renteon. A mediator between different Carrental management platform's pricelist format and Renteon, Which eliminates manual work that I personally know so many car-rental companies do.
 
 At this current version PriceList instances are constructed with classmethods directly from API responses from Renteon directly (json).
 
