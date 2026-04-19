@@ -381,7 +381,7 @@ prices.to_dataframe(unpack_durations=True, up_to=28)
 ```
 Unpacked here means that if the LOR range is defined as e.g. 1-7 in Renteon the Dataframe will be unpacked to columns 1,2,3,4,5,6,7.
 up_to is for when a range is open ended e.g. 21-. The range is unpacked up to the up_to value. e.g. up_to=30 column 21- will be unpacked to  ...21,22,23,24,25.....,30 
----
+
 
 ### Validation
 
