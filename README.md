@@ -79,7 +79,7 @@ prices = client.get_prices(
 )
 
 discounted = prices.apply_percentage(-10)
-client.save_prices(pricelist_id=YOUR_PRICELIST_ID, price_list=discounted)
+client.save_prices(pricelist_id=2426, price_list=discounted)
 ```
 
 ---
@@ -89,7 +89,7 @@ client.save_prices(pricelist_id=YOUR_PRICELIST_ID, price_list=discounted)
 ### Authentication
 
 Authentication is handled automatically by `RenteonTokenManager`. Tokens are cached in memory and re-fetched transparently when they expire (tokens are valid for 24 hours).
-In this current vesion of the tokens do not persist externally. Each time a client is created the token is re-fetched.
+In this current vesion of the tokens do not persist externally. Each time a client is created the token is refetched.
 You can easily set up persistence in your system if you want to launch multiple clients in a period of 22 hours with the same authorization. 
 Tokens from Renteon are valid for 24 hous but in the RenteonTokenManager the expiry time is set to 22: `self._token_expiry - timedelta(hours=2)`
 
@@ -145,6 +145,24 @@ prices = client.get_prices(
 )
 ```
 
+**Filtering by office code instead of office ID:**
+
+You can supply `office_codes` (string codes) instead of `office_ids`. The client resolves the codes to IDs automatically via the office catalog. Supply one or the other, not both.
+
+```python
+prices = client.get_prices(
+    pricelist_id=1000,
+    date_from=datetime(2026, 1, 1),
+    date_to=datetime(2026, 12, 31),
+    office_codes=["ANDRO", "MORDOR"],   # resolved to IDs via the office catalog
+)
+```
+
+Pass `None` inside the list for common prices (prices not assigned to any specific office):
+```python
+office_codes=[None, "MORDOR"]   # common prices + MORDOR office
+```
+
 ---
 
 ### The Pricelist Catalog
@@ -162,7 +180,7 @@ client.pricelists_catalog
 client.raw_pricelists_catalog
 
 
-# Force a re-fetch
+# Force a re-fetch. Good to have
 client.refresh_pricelist_catalog()
 ```
 
@@ -177,6 +195,40 @@ the caller is responsible for knowing which environment they're talking to and s
 E.g. production these data need to persist when necessary to avoid unecessary requests to the endpoint.
 e.g. This class will not constantly validate whether Office "Andromeda 1"'s Office ID is 1000 OR whether car category XXMR is included as valid or whether there are valid OfficeIDs linked to that pricelist or anything else.
 You can read the RenteonAPI docs  (your personal link)/en/api/help/referenceex
+
+---
+
+### The Office Catalog
+
+The client also exposes the list of offices configured in your Renteon account. The office catalog is fetched lazily (on first access) and cached for the lifetime of the client.
+
+```python
+# Dict of {OfficeCode: {"Id": int, "Name": str}} for all offices
+client.offices_catalog
+
+# Raw API response from GET /api/office/getSimpleList/
+client.raw_offices_catalog
+
+# List of all office codes
+client.list_office_codes()
+
+# Force a refetch
+client.refresh_office_catalog()
+```
+
+**`offices_map`  BiDirectional lookup between OfficeId and OfficeCode:**
+
+```python
+# Returns a BiDirectionalDictionary  look up in either direction
+om = client.offices_map
+
+om[123]       # OfficeId  ----> OfficeCode  e.g. "MORDOR"
+om["MORDOR"]     # OfficeCode ---> OfficeId   e.g.  123
+```
+
+`offices_map` is mainly used when reading from or writing to Excel (see [Excel Import/Export](#excel-importexport) below), where Renteon expects string office codes rather than integer IDs.
+
+The `None` key in `offices_catalog` maps to `{"Id": -1, "Name": "Common Prices"}`, matching the special `-1` value Renteon uses in its API for prices not tied to any office (called common prices).
 
 ---
 
@@ -221,7 +273,7 @@ Constructing PriceLists from external Car-rental pricing data pipelines based on
 Integrating Renteon with custom ETL pipelines.
 
 
-Transforming Rate tables from other sources (e.g. other car rental management systems) to a PriceList instance compatible with Renteon. A mediator between different Carrental management platform's pricelist format and Renteon, Which eliminates manual work that I personally know so many car-rental companies do.
+Transforming Rate tables from other sources (e.g. other car rental management systems) to a PriceList instance compatible with Renteon. A mediator between different CRM's pricelist format and Renteon, Which eliminates manual work that I personally know so many car-rental companies do.
 
 At this current version PriceList instances are constructed with classmethods directly from API responses from Renteon directly (json).
 
@@ -273,12 +325,33 @@ prices[datetime(2026, 3, 1) :]     # open end: all rows active from Mar 1 onward
 prices[: datetime(2026, 6, 30)]    # open start: all rows active up to Jun 30
 ```
 
+**By duration (LOR / Length of Rental):**
+
+Returns a new PriceList keeping only the duration/LOR ranges that overlap `[duration_from, duration_to]`.
+`duration_to=None` means open-ended (no upper limit).
+
+```python
+# Only keep prices for rentals of 1 to 7 days
+prices.by_duration(duration_from=1, duration_to=7)
+
+# Only keep prices that cover 14 days or longer
+prices.by_duration(duration_from=14)
+
+#Example:
+seven_days_discount = prices.by_duration(duration_from=7, duration_to=7) - 5
+```
+
+Note: this filters out individual duration *ranges* from each row. Rows whose ranges all fall outside the given range are dropped entirely.
+
 #### Iteration and indexing
 
 ```python
 len(prices)         # number of rows
 prices[0]           # first row (PriceRow)
 prices[-1]          # last row
+
+# Square bracket with a SIPP string : returns a list[PriceRow] for that category
+prices["MDMR"]      # all rows for SIPP "MDMR"
 
 for row in prices:
     print(row.CarCategorySipp, row.DateFrom, row.DateTo)
@@ -379,9 +452,52 @@ prices.to_dataframe()
 # Unpacked durations (one column per rental day)
 prices.to_dataframe(unpack_durations=True, up_to=28)
 ```
-Unpacked here means that if the LOR range is defined as e.g. 1-7 in Renteon the Dataframe will be unpacked to columns 1,2,3,4,5,6,7.
+> `unpack_durations=True` Unpacked here means that if the LOR range is defined as e.g. 1-7 in Renteon the Dataframe will be unpacked to columns 1,2,3,4,5,6,7.
 up_to is for when a range is open ended e.g. 21-. The range is unpacked up to the up_to value. e.g. up_to=30 column 21- will be unpacked to  ...21,22,23,24,25.....,30 
 
+#### Excel Import/Export
+
+**`from_excel(path, office_map=None)`**  construct a PriceList from Renteon's exported Excel file.
+
+The pricelist data is expected in the **second sheet** of the file (index 1), matching Renteon's own "Export Pricelist" layout. Duration ranges are parsed from column headers like `1-1`, `2-3`, `8-`. 
+
+```python
+# Without office mapping : all rows will have OfficeId=None (raises UserWarning)
+prices = PriceList.from_excel("pricelist_export.xlsx")
+
+
+# With office mapping : Office column (string codes) is resolved to integer OfficeIds
+prices = PriceList.from_excel("pricelist_export.xlsx", office_map=client.offices_map)
+#If all you want is the prices on an excel sheet and nothing else you can skip the office map. 
+#If you intend to load the excel back up into renteon via import or via this sdk you need an office map for both output and input to translate the file's string office-codes to int office-ids the API can ingest
+```
+
+**`to_excel(path, office_map=None)`**  export a PriceList to an Excel file in Renteon's "Import Pricelist" format, suitable for manual upload back to Renteon.
+
+```python
+# Without office mapping : OfficeId integers are written as-is; Renteon WILL reject the upload
+prices.to_excel("output.xlsx")
+
+# With office mapping : OfficeId integers are resolved to the string codes Renteon expects
+prices.to_excel("output.xlsx", office_map=client.offices_map)
+```
+
+> The output file always has two sheets: a blank sheet at index 0 and the prices at index 1 (named "Prices"), matching the layout Renteon's importer expects. In my tests I've figured it does not care what the 1st sheet is. It can be left blank on export
+
+**`from_dataframe(df)`**  reconstruct a PriceList from a DataFrame previously produced by `.to_dataframe()` (range mode, `unpack_durations=False`). 
+```python
+df = prices.to_dataframe()
+
+# ....manipulate df with pandas
+prices_back = PriceList.from_dataframe(df)
+```
+
+Required DataFrame columns: `SIPP`, `DateFrom`, `DateTo`. Optional: `OfficeId`, `Discount`. Duration range columns are auto-detected by their name format (`"1-1"`, `"2-3"`, `"8-"`, etc.).
+
+> `from_dataframe` expects the **range-mode** output (`unpack_durations=False`). The unpacked/day-per-column format cannot be round-tripped back. If you unpack first and then save prices Renteon API will not accept it. Duration ranges are immutable on Renteon.
+
+
+---
 
 ### Validation
 
@@ -416,6 +532,7 @@ from renteon_pricing_sdk.exceptions import (
     RenteonNotFoundError,         # 404
     RenteonUnprocessableEntityError,  # 422
     RenteonServerError,           # 5xx
+    RenteonAuthError,             # raised before any HTTP call  bad/missing credentials
 )
 
 try:
@@ -439,6 +556,17 @@ except RenteonServerError as e:
 
 Every exception carries a `status_code` attribute (`int | None`). `None` means the error occurred before any HTTP call was made (e.g. a name lookup failure against the local catalog).
 
+`RenteonAuthError` is a separate exception class (does **not** inherit from `RenteonAPIError`) raised when credentials are missing or invalid. It is thrown by `RenteonTokenManager` during token fetch  before any pricing endpoint is contacted.
+
+```python
+from renteon_pricing_sdk.exceptions import RenteonAuthError
+
+try:
+    client = RenteonClient.from_env()   # raises if .env is missing required variables
+except RenteonAuthError as e:
+    print(f"Auth failed: {e}")
+```
+
 
 
 ---
@@ -447,11 +575,12 @@ Every exception carries a `status_code` attribute (`int | None`). `None` means t
 
 ```
 renteon_pricing_sdk/
-├── token.py        RenteonTokenManager   — auth, token lifecycle
-├── exceptions.py   Exception hierarchy   — HTTP error mapping
-├── models.py       Pydantic models       — DurationPrice, PriceRow, GetPricesRequest
-├── pricing.py      PriceList             — domain operations, filtering, arithmetic
-└── client.py       RenteonClient         — HTTP transport, catalog
+├── token.py                       RenteonTokenManager        — auth, token lifecycle
+├── exceptions.py                  Exception hierarchy        — HTTP error mapping
+├── models.py                      Pydantic models            — DurationPrice, PriceRow, GetPricesRequest
+├── pricing.py                     PriceList                  — domain operations, filtering, arithmetic, Excel/DataFrame I/O
+├── client.py                      RenteonClient              — HTTP transport, pricelist & office catalogs
+└── bi_directional_dictionary.py   BiDirectionalDictionary    — bidirectional key-value lookup utility
 ```
 
 **Design principles:**
@@ -460,6 +589,7 @@ renteon_pricing_sdk/
 - `models.py` holds data shapes and validation only. No HTTP.
 - `pricing.py` owns all operations on pricing data. It is an object that represents a Renteon Pricelist and handles pricing operations. It never makes HTTP calls.
 - `client.py` is a thin transport layer. It builds requests, fires them, and returns responses. It does not implement pricing logic.
+- `bi_directional_dictionary.py` is a small utility. `BiDirectionalDictionary` is a `Mapping` subclass that lets you look up values by key **or** keys by value  used by `client.offices_map` so callers can convert freely between integer OfficeIds and string OfficeCodes without maintaining two separate dicts. Again be careful of naming conventions in production. OfficeCodes strings can be duplicates. OfficeIds cannot. If that is the case it can lead to unexpected bugs.
 
 ---
 
